@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Room",
+      "description": "Paying guest accommodation room",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "roomNumber": { "type": "string" },
+        "type": { "type": "string", "enum": ["Single", "Double", "Triple", "Four-Sharing", "Five-Sharing"] },
+        "rentPrice": { "type": "number" },
+        "utilityType": { "type": "string", "enum": ["Fixed", "Shared", "Metered"] },
+        "fixedUtilityAmount": { "type": "number" },
+        "capacity": { "type": "number" },
+        "status": { "type": "string", "enum": ["Available", "Full", "Maintenance"] }
+      },
+      "required": ["id", "roomNumber", "type", "rentPrice", "utilityType", "capacity", "status"]
+    },
+    "Guest": {
+      "title": "Guest",
+      "description": "Paying guest details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "roomId": { "type": "string" },
+        "checkInDate": { "type": "string" },
+        "depositPaid": { "type": "number" },
+        "status": { "type": "string", "enum": ["Active", "CheckedOut"] },
+        "photoUrl": { "type": "string" }
+      },
+      "required": ["id", "name", "phone", "email", "roomId", "checkInDate", "depositPaid", "status"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Ledger payment transaction record for rent or utility",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "guestId": { "type": "string" },
+        "guestName": { "type": "string" },
+        "roomNumber": { "type": "string" },
+        "type": { "type": "string", "enum": ["Rent", "Utility"] },
+        "amount": { "type": "number" },
+        "billingPeriod": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "paidDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["Paid", "Unpaid", "Overdue"] },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "guestId", "guestName", "roomNumber", "type", "amount", "billingPeriod", "dueDate", "status"]
+    },
+    "DeletedGuest": {
+      "title": "DeletedGuest",
+      "description": "Soft-deleted guest archived for recycle bin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "guest": { "type": "object" },
+        "deletedAt": { "type": "string" },
+        "originalPayments": { "type": "array" }
+      },
+      "required": ["id", "guest", "deletedAt", "originalPayments"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/rooms/{roomId}": {
+      "schema": "Room",
+      "description": "User's rooms collection"
+    },
+    "/users/{userId}/guests/{guestId}": {
+      "schema": "Guest",
+      "description": "User's guests collection"
+    },
+    "/users/{userId}/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "User's finance transactions"
+    },
+    "/users/{userId}/deletedGuests/{deletedGuestId}": {
+      "schema": "DeletedGuest",
+      "description": "User's recycle bin for removed guests"
+    }
+  }
+}

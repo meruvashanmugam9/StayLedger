@@ -1,0 +1,6 @@
+{
+  "name": "Paying Guest Tracker",
+  "description": "Manage rooms, guest details, rent payments, utility bills, and send reminders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
