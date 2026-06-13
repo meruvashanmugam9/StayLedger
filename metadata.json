@@ -1,6 +1,6 @@
 {
-  "name": "Paying Guest Tracker",
-  "description": "Manage rooms, guest details, rent payments, utility bills, and send reminders.",
+  "name": "EasyStay PG Tracker",
+  "description": "Premium Paying Guest accommodation and hostel manager with automated rent ledger, pro-rata utility calculations, and smart WhatsApp reminders.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

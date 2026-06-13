@@ -1,0 +1,78 @@
+{
+  "name": "EasyStay Paying Guest Tracker",
+  "short_name": "EasyStay",
+  "description": "Premium Paying Guest (PG) accommodation and hostel management system tracker. Manage guest details, rent payments, rooms, and billing schedules with smart reminders.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "orientation": "any",
+  "id": "/",
+  "lang": "en-US",
+  "dir": "ltr",
+  "categories": [
+    "utilities",
+    "business",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/",
+      "description": "View overall occupancy and PG statistics"
+    },
+    {
+      "name": "All Guests",
+      "url": "/?tab=guests",
+      "description": "Manage paying guests and room numbers"
+    },
+    {
+      "name": "Rent Ledger",
+      "url": "/?tab=payments",
+      "description": "Track payments and collection dates"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-desktop.jpg",
+      "sizes": "1280x720",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "EasyStay PG Management Dashboard - Desktop"
+    },
+    {
+      "src": "/screenshot-mobile.jpg",
+      "sizes": "720x1285",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "EasyStay Room & Rent Manager - Mobile"
+    }
+  ],
+  "prefer_related_applications": false
+}

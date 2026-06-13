@@ -13,7 +13,10 @@ import {
   Database, 
   Layers,
   Sparkles,
-  Bell
+  Bell,
+  Briefcase,
+  TrendingUp,
+  Lock
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -28,9 +31,11 @@ import {
   Guest, 
   Payment, 
   DeletedGuest,
+  BusinessConfig,
   INITIAL_ROOMS, 
   INITIAL_GUESTS, 
-  INITIAL_PAYMENTS 
+  INITIAL_PAYMENTS,
+  INITIAL_BUSINESS_CONFIG
 } from './types';
 
 // Component imports
@@ -40,6 +45,9 @@ import GuestsSection from './components/GuestsSection';
 import PaymentsSection from './components/PaymentsSection';
 import UtilitySplitter from './components/UtilitySplitter';
 import RemindersSection from './components/RemindersSection';
+import AnalyticsSection from './components/AnalyticsSection';
+import BusinessHub from './components/BusinessHub';
+import PlatformAdmin, { SubscriptionMonthRecord } from './components/PlatformAdmin';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('Dashboard');
@@ -70,6 +78,15 @@ export default function App() {
     return cached ? JSON.parse(cached) : [];
   });
 
+  const [businessConfig, setBusinessConfig] = useState<BusinessConfig>(() => {
+    const cached = localStorage.getItem('pg_business_config');
+    return cached ? JSON.parse(cached) : INITIAL_BUSINESS_CONFIG;
+  });
+
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'suspended' | 'unpaid'>('active');
+  const [suspensionMessage, setSuspensionMessage] = useState<string>('');
+  const [subscriptionLedger, setSubscriptionLedger] = useState<SubscriptionMonthRecord[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const migrationRef = useRef<boolean>(false);
 
@@ -92,9 +109,10 @@ export default function App() {
             const tempGuests = JSON.parse(localStorage.getItem('pg_guests') || '[]');
             const tempPayments = JSON.parse(localStorage.getItem('pg_payments') || '[]');
             const tempDeleted = JSON.parse(localStorage.getItem('pg_deleted_guests') || '[]');
+            const tempConfig = JSON.parse(localStorage.getItem('pg_business_config') || 'null');
 
+            const batch = writeBatch(db);
             if (tempRooms.length > 0 || tempGuests.length > 0 || tempPayments.length > 0 || tempDeleted.length > 0) {
-              const batch = writeBatch(db);
               tempRooms.forEach((r: Room) => {
                 batch.set(doc(db, 'users', currentUser.uid, 'rooms', r.id), r);
               });
@@ -107,9 +125,15 @@ export default function App() {
               tempDeleted.forEach((d: DeletedGuest) => {
                 batch.set(doc(db, 'users', currentUser.uid, 'deletedGuests', d.id), d);
               });
-              await batch.commit();
-              console.log('Sandbox data migrated to the secure cloud account successfully.');
             }
+            // Always set business settings in first migration batch
+            batch.set(
+              doc(db, 'users', currentUser.uid, 'businessConfig', 'settings'), 
+              tempConfig || INITIAL_BUSINESS_CONFIG
+            );
+
+            await batch.commit();
+            console.log('Sandbox data migrated to the secure cloud account successfully.');
           }
         } catch (error) {
           console.error("Data migration to cloud failed: ", error);
@@ -160,9 +184,34 @@ export default function App() {
       const list: DeletedGuest[] = [];
       snap.forEach(d => list.push(d.data() as DeletedGuest));
       setDeletedGuests(list);
-      setIsSyncing(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/deletedGuests`);
+    });
+
+    const configDocRef = doc(db, 'users', user.uid, 'businessConfig', 'settings');
+    const unsubConfig = onSnapshot(configDocRef, (snap) => {
+      if (snap.exists()) {
+        setBusinessConfig(snap.data() as BusinessConfig);
+      }
+      setIsSyncing(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `users/${user.uid}/businessConfig/settings`);
+    });
+
+    const userDocRef = doc(db, 'users', user.uid);
+    const unsubUser = onSnapshot(userDocRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setSubscriptionStatus(data.subscriptionStatus || 'active');
+        setSuspensionMessage(data.suspensionMessage || '');
+        setSubscriptionLedger(data.subscriptionLedger || []);
+      } else {
+        setSubscriptionStatus('active');
+        setSuspensionMessage('');
+        setSubscriptionLedger([]);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
     });
 
     return () => {
@@ -170,8 +219,40 @@ export default function App() {
       unsubGuests();
       unsubPayments();
       unsubDeletedGuests();
+      unsubConfig();
+      unsubUser();
     };
   }, [user]);
+
+  // Synchronize User profile details to root `/users/{userId}` for Platform Admin visibility
+  useEffect(() => {
+    if (!user) return;
+    
+    const syncProfile = async () => {
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || businessConfig.landlordName || 'PG Owner',
+          businessName: businessConfig.businessName || 'EasyStay PG',
+          phone: businessConfig.phone || '',
+          roomCount: rooms.length,
+          guestCount: guests.filter(g => !g.isCheckedOut).length,
+          lastActive: new Date().toISOString(),
+        }, { merge: true });
+      } catch (error) {
+        // Console log instead of halting if permission is denied (e.g. before login complete or dev offline)
+        console.warn("User stats sync info:", error);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      syncProfile();
+    }, 5500);
+
+    return () => clearTimeout(timer);
+  }, [user, rooms.length, guests.length, businessConfig.businessName, businessConfig.landlordName, businessConfig.phone]);
 
   // Sync state with localStorage (fallback Cache for offline operation)
   useEffect(() => {
@@ -197,6 +278,12 @@ export default function App() {
       localStorage.setItem('pg_deleted_guests', JSON.stringify(deletedGuests));
     }
   }, [deletedGuests, user]);
+
+  useEffect(() => {
+    if (!user) {
+      localStorage.setItem('pg_business_config', JSON.stringify(businessConfig));
+    }
+  }, [businessConfig, user]);
 
   // Cleanup: Purge deleted logs older than 30 days automatically
   useEffect(() => {
@@ -226,7 +313,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    if (confirm("Disconnect cloud sync and log out of StayLedger?")) {
+    if (confirm("Disconnect cloud sync and log out of EasyStay?")) {
       try {
         await signOut(auth);
         setUser(null);
@@ -632,6 +719,20 @@ export default function App() {
     }
   };
 
+  // Handler: Save custom business configuration
+  const handleSaveConfig = async (updated: BusinessConfig) => {
+    setBusinessConfig(updated);
+    if (user) {
+      try {
+        await setDoc(doc(db, 'users', user.uid, 'businessConfig', 'settings'), updated);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}/businessConfig/settings`);
+      }
+    } else {
+      localStorage.setItem('pg_business_config', JSON.stringify(updated));
+    }
+  };
+
   // Backup: Reset all data back to original default mock examples
   const handleResetToDefault = async () => {
     if (confirm('Reset to standard template? This will override your present changes.')) {
@@ -740,77 +841,79 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row selection:bg-indigo-100 selection:text-indigo-800 text-slate-800">
       
-      {/* Side Navigation - StayLedger Aesthetic */}
-      <aside className="w-full md:w-65 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex flex-col p-6 shrink-0 z-40">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
-            <Building className="w-4 h-4" />
+      {/* Side Navigation - EasyStay Aesthetic */}
+      <aside className="w-full md:w-60 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex flex-col p-4 shrink-0 z-40 md:h-screen md:sticky md:top-0 md:overflow-y-auto scrollbar-thin">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center text-white shrink-0">
+            <Building className="w-3.5 h-3.5" />
           </div>
-          <div>
-            <h1 className="font-bold text-lg tracking-tight text-slate-900 leading-tight">StayLedger</h1>
-            <span className="text-[9px] font-bold text-indigo-650 tracking-wider uppercase block">Paying Guest Tracker</span>
+          <div className="min-w-0">
+            <h1 className="font-bold text-sm tracking-tight text-slate-900 leading-tight truncate block" title={businessConfig?.businessName || 'EasyStay'}>
+              {businessConfig?.businessName || 'EasyStay'}
+            </h1>
+            <span className="text-[8px] font-bold text-indigo-650 tracking-wider uppercase block">PG Accommodation</span>
           </div>
         </div>
 
         {/* Cloud Persistence & Backup SaaS Status Widget */}
-        <div className="mb-6 p-4 rounded-2xl border transition duration-200 bg-linear-to-b from-indigo-50/20 to-indigo-50/40 border-indigo-100 shadow-3xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-bold text-indigo-600 tracking-wider uppercase flex items-center gap-1">
-              <Database className="w-3 h-3" />
+        <div className="mb-3.5 p-3 rounded-xl border transition duration-200 bg-linear-to-b from-indigo-50/10 to-indigo-50/30 border-indigo-100 shadow-3xs">
+          <div className="flex items-center justify-between mb-1.55">
+            <span className="text-[9px] font-bold text-indigo-600 tracking-wider uppercase flex items-center gap-1">
+              <Database className="w-2.5 h-2.5" />
               <span>Cloud Engine</span>
             </span>
             {authLoading ? (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+              <span className="w-1 h-1 rounded-full bg-amber-400 animate-ping" />
             ) : user ? (
-              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase bg-green-50 text-green-700 border border-green-150 flex items-center gap-0.5">
+              <span className="px-1 py-0.2 rounded text-[8px] font-bold uppercase bg-green-50 text-green-700 border border-green-150 flex items-center gap-0.5">
                 <span className="w-1 h-1 bg-green-500 rounded-full mr-0.5" />
                 Active
               </span>
             ) : (
-              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-150">
+              <span className="px-1 py-0.2 rounded text-[8px] font-bold uppercase bg-amber-50 text-amber-700 border border-amber-150">
                 Offline
               </span>
             )}
           </div>
 
           {user ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5">
                 <img 
                   src={user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80'} 
                   alt={user.displayName || 'Landlord'} 
                   referrerPolicy="no-referrer"
-                  className="w-7 h-7 rounded-full border border-indigo-200"
+                  className="w-6 h-6 rounded-full border border-indigo-200"
                 />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-800 truncate" title={user.displayName || ''}>
+                  <p className="text-[11px] font-bold text-slate-800 truncate" title={user.displayName || ''}>
                     {user.displayName || 'Landlord'}
                   </p>
-                  <p className="text-[9px] text-slate-400 font-mono truncate">
+                  <p className="text-[8px] text-slate-400 font-mono truncate">
                     {user.email}
                   </p>
                 </div>
               </div>
-              <p className="text-[10px] text-indigo-650 leading-relaxed font-semibold">
-                🔒 Power Off Proof. All actions auto-saved in cloud.
+              <p className="text-[9px] text-indigo-650 leading-tight font-semibold">
+                🔒 Protected & auto-saved.
               </p>
               <button
                 onClick={handleLogout}
-                className="w-full py-1 text-center bg-white hover:bg-rose-50 hover:text-rose-600 text-[10px] font-bold text-slate-500 border border-slate-200 rounded-lg transition"
+                className="w-full py-0.5 text-center bg-white hover:bg-rose-50 hover:text-rose-600 text-[9px] font-bold text-slate-400 border border-slate-200 rounded-md transition cursor-pointer"
               >
                 Disconnect Sync
               </button>
             </div>
           ) : (
-            <div className="space-y-2">
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                If the device powers off, local data is vulnerable. Sync to secure cloud database.
+            <div className="space-y-1.5">
+              <p className="text-[9px] text-slate-500 leading-tight">
+                Secure actions in high-speed cloud database.
               </p>
               <button
                 onClick={handleLogin}
-                className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                className="w-full py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[9px] font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
               >
-                <Database className="w-3.5 h-3.5" />
+                <Database className="w-3 h-3" />
                 <span>Sign in with Google</span>
               </button>
             </div>
@@ -821,6 +924,7 @@ export default function App() {
         <nav className="flex flex-row md:flex-col gap-1 md:gap-2 overflow-x-auto md:overflow-x-visible pb-3 md:pb-0 scrollbar-none md:flex-1">
           {[
             { name: 'Dashboard', icon: <Layers className="w-4 h-4" /> },
+            { name: 'Analytics', icon: <TrendingUp className="w-4 h-4" /> },
             { 
               name: 'Reminders', 
               icon: <Bell className="w-4 h-4" />, 
@@ -829,17 +933,19 @@ export default function App() {
             { name: 'Rooms', icon: <Home className="w-4 h-4" /> },
             { name: 'Guests', icon: <Users className="w-4 h-4" /> },
             { name: 'Ledger', icon: <DollarSign className="w-4 h-4" /> },
-            { name: 'Splitter', icon: <Divide className="w-4 h-4" /> }
+            { name: 'Splitter', icon: <Divide className="w-4 h-4" /> },
+            { name: 'Business Settings', icon: <Briefcase className="w-4 h-4" /> },
+            ...(user && user.email?.toLowerCase() === 'meruvashanmugam9@gmail.com' ? [{ name: 'Platform Admin', icon: <Lock className="w-4 h-4" /> }] : [])
           ].map((tab) => (
             <button
-              key={tab.name}
-              id={`tab-nav-${tab.name.toLowerCase()}`}
-              onClick={() => setActiveTab(tab.name)}
-              className={`flex items-center justify-between px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all duration-150 cursor-pointer whitespace-nowrap ${
-                activeTab === tab.name 
-                  ? 'bg-indigo-50 text-indigo-700 shadow-sm shadow-indigo-100/50' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-              }`}
+               key={tab.name}
+               id={`tab-nav-${tab.name.toLowerCase().replace(/\s+/g, '-')}`}
+               onClick={() => setActiveTab(tab.name)}
+               className={`flex items-center justify-between px-3 py-1.5 rounded-xl font-semibold text-xs tracking-wide transition-all duration-150 cursor-pointer whitespace-nowrap ${
+                 activeTab === tab.name 
+                   ? 'bg-indigo-50 text-indigo-700 shadow-sm shadow-indigo-100/50' 
+                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+               }`}
             >
               <div className="flex items-center gap-3">
                 {tab.icon}
@@ -868,88 +974,172 @@ export default function App() {
       {/* Main Content Pane */}
       <div className="flex-1 flex flex-col min-w-0">
         <main className="flex-1 p-6 md:p-10">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-            >
-              {activeTab === 'Dashboard' && (
-                <Dashboard 
-                  rooms={rooms}
-                  guests={guests}
-                  payments={payments}
-                  onQuickPay={handleQuickPay}
-                  onNavigateTo={setActiveTab}
-                />
-              )}
+          {(subscriptionStatus === 'suspended' || subscriptionStatus === 'unpaid' || subscriptionLedger.some(item => item.status === 'Pending')) && user?.email?.toLowerCase() !== 'meruvashanmugam9@gmail.com' ? (
+            <div className="max-w-lg mx-auto my-12 bg-white rounded-3xl border border-rose-100 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="p-1 bg-linear-to-r from-red-500 to-rose-600" />
+              <div className="p-8 text-center space-y-6">
+                <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto text-rose-600 animate-bounce">
+                  <span className="text-2xl font-bold">⚠️</span>
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">SaaS Instance Suspended</h2>
+                  <p className="text-xs text-rose-500 font-bold uppercase tracking-wider font-mono">
+                    {subscriptionLedger.some(item => item.status === 'Pending') ? 'Automatic Payment Lock' : 'Workspace Suspended'}
+                  </p>
+                </div>
+                
+                <p className="text-sm text-slate-600 leading-relaxed font-semibold bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                  {subscriptionLedger.some(item => item.status === 'Pending') 
+                    ? "SaaS Instance Suspended. Premium cloud hosting services for this accommodate are currently locked. Contact administrative support at meruvashanmugam9@gmail.com to proceed."
+                    : (suspensionMessage || "SaaS Instance Suspended. Premium cloud hosting services for this accommodate are currently locked. Contact administrative support at meruvashanmugam9@gmail.com to proceed.")
+                  }
+                </p>
 
-              {activeTab === 'Reminders' && (
-                <RemindersSection 
-                  payments={payments}
-                  guests={guests}
-                  rooms={rooms}
-                  onQuickPay={handleQuickPay}
-                  onUpdatePayment={handleUpdatePayment}
-                />
-              )}
+                {subscriptionLedger.some(item => item.status === 'Pending') && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-left space-y-1.5 font-sans">
+                    <p className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                      <span>⚠️ Unpaid Subscription Months:</span>
+                    </p>
+                    <div className="divide-y divide-amber-100 max-h-32 overflow-y-auto">
+                      {subscriptionLedger.filter(item => item.status === 'Pending').map(item => (
+                        <div key={item.id} className="py-1.5 flex items-center justify-between text-xs font-semibold text-amber-700">
+                          <span>{item.monthKey}</span>
+                          <span>₹{item.amountBilled}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-              {activeTab === 'Rooms' && (
-                <RoomsSection 
-                  rooms={rooms}
-                  guests={guests}
-                  onAddRoom={handleAddRoom}
-                  onUpdateRoom={handleUpdateRoom}
-                  onDeleteRoom={handleDeleteRoom}
-                />
-              )}
+                <div className="space-y-3 pt-2">
+                  <a 
+                    href={`https://wa.me/91${businessConfig?.phone || ''}?text=${encodeURIComponent(`Hello, my PG Owner account with email ${user?.email} is suspended. I cleared the payment. Please activate my EasyStay instance.`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs shadow-md transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    🚀 Clear Dues & Activate Account
+                  </a>
+                  
+                  <p className="text-[10px] text-slate-400">
+                    If you paid recently, please message the platform owner or log out below to disconnect synchronization.
+                  </p>
 
-              {activeTab === 'Guests' && (
-                <GuestsSection 
-                  guests={guests}
-                  rooms={rooms}
-                  payments={payments}
-                  deletedGuests={deletedGuests}
-                  onCheckInGuest={handleCheckInGuest}
-                  onUpdateGuest={handleUpdateGuest}
-                  onCheckoutGuest={handleCheckoutGuest}
-                  onDeleteGuestHistory={handleDeleteGuestHistory}
-                  onRestoreGuest={handleRestoreGuest}
-                  onPermanentDeleteGuest={handlePermanentDeleteGuest}
-                  onAddRoom={handleAddRoom}
-                  onUpdateRoom={handleUpdateRoom}
-                />
-              )}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full py-2 border border-slate-200 hover:bg-rose-50 hover:text-rose-600 text-slate-500 font-bold text-xs rounded-xl transition cursor-pointer"
+                  >
+                    Disconnect Sync & Log Out
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+              >
+                {activeTab === 'Dashboard' && (
+                  <Dashboard 
+                    rooms={rooms}
+                    guests={guests}
+                    payments={payments}
+                    onQuickPay={handleQuickPay}
+                    onNavigateTo={setActiveTab}
+                  />
+                )}
 
-              {activeTab === 'Ledger' && (
-                <PaymentsSection 
-                  payments={payments}
-                  guests={guests}
-                  rooms={rooms}
-                  onAddPayment={handleAddPayment}
-                  onUpdatePayment={handleUpdatePayment}
-                  onDeletePayment={handleDeletePayment}
-                />
-              )}
+                {activeTab === 'Analytics' && (
+                  <AnalyticsSection 
+                    payments={payments}
+                    guests={guests}
+                    rooms={rooms}
+                  />
+                )}
 
-              {activeTab === 'Splitter' && (
-                <UtilitySplitter 
-                  guests={guests}
-                  rooms={rooms}
-                  onApplyBills={handleApplyBills}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
+                {activeTab === 'Reminders' && (
+                  <RemindersSection 
+                    payments={payments}
+                    guests={guests}
+                    rooms={rooms}
+                    onQuickPay={handleQuickPay}
+                    onUpdatePayment={handleUpdatePayment}
+                  />
+                )}
+
+                {activeTab === 'Rooms' && (
+                  <RoomsSection 
+                    rooms={rooms}
+                    guests={guests}
+                    onAddRoom={handleAddRoom}
+                    onUpdateRoom={handleUpdateRoom}
+                    onDeleteRoom={handleDeleteRoom}
+                  />
+                )}
+
+                {activeTab === 'Guests' && (
+                  <GuestsSection 
+                    guests={guests}
+                    rooms={rooms}
+                    payments={payments}
+                    deletedGuests={deletedGuests}
+                    onCheckInGuest={handleCheckInGuest}
+                    onUpdateGuest={handleUpdateGuest}
+                    onCheckoutGuest={handleCheckoutGuest}
+                    onDeleteGuestHistory={handleDeleteGuestHistory}
+                    onRestoreGuest={handleRestoreGuest}
+                    onPermanentDeleteGuest={handlePermanentDeleteGuest}
+                    onAddRoom={handleAddRoom}
+                    onUpdateRoom={handleUpdateRoom}
+                  />
+                )}
+
+                {activeTab === 'Ledger' && (
+                  <PaymentsSection 
+                    payments={payments}
+                    guests={guests}
+                    rooms={rooms}
+                    onAddPayment={handleAddPayment}
+                    onUpdatePayment={handleUpdatePayment}
+                    onDeletePayment={handleDeletePayment}
+                    businessConfig={businessConfig}
+                  />
+                )}
+
+                {activeTab === 'Splitter' && (
+                  <UtilitySplitter 
+                    guests={guests}
+                    rooms={rooms}
+                    onApplyBills={handleApplyBills}
+                  />
+                )}
+
+                {activeTab === 'Business Settings' && (
+                  <BusinessHub 
+                    config={businessConfig}
+                    onSaveConfig={handleSaveConfig}
+                    subscriptionLedger={subscriptionLedger}
+                    subscriptionStatus={subscriptionStatus}
+                  />
+                )}
+
+                {activeTab === 'Platform Admin' && (
+                  <PlatformAdmin />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          )}
         </main>
 
         {/* Footer */}
         <footer className="bg-slate-50 border-t border-slate-200 py-5 px-6 md:px-10">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-xs">
             <div className="text-slate-400 font-mono">
-              <span>StayLedger v1.0 • PG Guest Tracker</span>
+              <span>EasyStay v1.0 • PG Guest Tracker</span>
             </div>
           </div>
         </footer>

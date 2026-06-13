@@ -63,9 +63,48 @@
         "originalPayments": { "type": "array" }
       },
       "required": ["id", "guest", "deletedAt", "originalPayments"]
+    },
+    "BusinessConfig": {
+      "title": "BusinessConfig",
+      "description": "Owner Paying Guest accommodation settings configuration",
+      "type": "object",
+      "properties": {
+        "businessName": { "type": "string" },
+        "landlordName": { "type": "string" },
+        "phone": { "type": "string" },
+        "upiId": { "type": "string" },
+        "gstin": { "type": "string" },
+        "address": { "type": "string" },
+        "termsAndConditions": { "type": "string" },
+        "currencySymbol": { "type": "string" }
+      },
+      "required": ["businessName", "landlordName", "phone", "upiId", "currencySymbol"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Registered PG client subscription profile and SaaS status details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "businessName": { "type": "string" },
+        "phone": { "type": "string" },
+        "roomCount": { "type": "number" },
+        "guestCount": { "type": "number" },
+        "subscriptionStatus": { "type": "string", "enum": ["active", "suspended", "unpaid"] },
+        "lastActive": { "type": "string" },
+        "suspensionMessage": { "type": "string" },
+        "subscriptionLedger": { "type": "array" }
+      },
+      "required": ["uid", "email"]
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Root user profile with SaaS licensing status and ledger entries"
+    },
     "/users/{userId}/rooms/{roomId}": {
       "schema": "Room",
       "description": "User's rooms collection"
@@ -81,6 +120,10 @@
     "/users/{userId}/deletedGuests/{deletedGuestId}": {
       "schema": "DeletedGuest",
       "description": "User's recycle bin for removed guests"
+    },
+    "/users/{userId}/businessConfig/{configId}": {
+      "schema": "BusinessConfig",
+      "description": "User's business configurations"
     }
   }
 }

@@ -91,3 +91,25 @@ export const INITIAL_PAYMENTS: Payment[] = [
   { id: 'p8', guestId: 'g2', guestName: 'Sophia Martinez', roomNumber: '102', type: 'Rent', amount: 380, billingPeriod: 'May 2026', dueDate: '2026-05-05', paidDate: '2026-05-02', status: 'Paid', description: 'Monthly rent' },
   { id: 'p9', guestId: 'g3', guestName: 'Liam Chen', roomNumber: '201', type: 'Rent', amount: 400, billingPeriod: 'May 2026', dueDate: '2026-05-05', paidDate: '2026-05-05', status: 'Paid', description: 'Monthly rent' },
 ];
+
+export interface BusinessConfig {
+  businessName: string;
+  landlordName: string;
+  phone: string;
+  upiId: string;
+  gstin?: string;
+  address?: string;
+  termsAndConditions?: string;
+  currencySymbol: string;
+}
+
+export const INITIAL_BUSINESS_CONFIG: BusinessConfig = {
+  businessName: 'EasyStay PG Accommodation',
+  landlordName: 'Shanmugam PG Admin',
+  phone: '+91 9443210123',
+  upiId: 'payingguest@upi',
+  gstin: '36AAAAA1111A1Z1',
+  address: 'Hitech Lane, 3rd Block, Madhapur, Hyderabad, Telangana - 500081',
+  termsAndConditions: '1. Rents must be paid by the 5th of every month.\n2. Security deposit is refundable upon checkout after adjusting damages.\n3. Tenants must notify 30 days before checkout.',
+  currencySymbol: '₹',
+};

@@ -22,7 +22,7 @@ import {
   Maximize2,
   Pencil
 } from 'lucide-react';
-import { Payment, Guest, Room } from '../types';
+import { Payment, Guest, Room, BusinessConfig } from '../types';
 
 interface PaymentsSectionProps {
   payments: Payment[];
@@ -31,6 +31,7 @@ interface PaymentsSectionProps {
   onAddPayment: (payment: Payment) => void;
   onUpdatePayment: (payment: Payment) => void;
   onDeletePayment: (id: string) => void;
+  businessConfig?: BusinessConfig;
 }
 
 export default function PaymentsSection({
@@ -39,7 +40,8 @@ export default function PaymentsSection({
   rooms,
   onAddPayment,
   onUpdatePayment,
-  onDeletePayment
+  onDeletePayment,
+  businessConfig
 }: PaymentsSectionProps) {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<string>('All');
@@ -618,7 +620,7 @@ export default function PaymentsSection({
         </div>
       )}
 
-      {/* Printable CSS Receipt Modal popup representation */}
+       {/* Printable CSS Receipt Modal popup representation */}
       {selectedReceipt && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 my-8">
@@ -636,83 +638,129 @@ export default function PaymentsSection({
             </div>
 
             {/* Print Section (printable block style) */}
-            <div id="re-receipt-print-area" className="p-6 bg-white space-y-6">
+            <div id="re-receipt-print-area" className="p-6 bg-white space-y-6 text-slate-800">
               {/* Header metadata logo */}
-              <div className="flex justify-between items-start pb-4 border-b border-dashed border-slate-250">
+              <div className="flex justify-between items-start pb-4 border-b border-dashed border-slate-200">
                 <div>
-                  <div className="flex items-center gap-1 text-slate-800">
-                    <Building className="w-4 h-4 text-indigo-620" />
-                    <span className="font-extrabold text-xs tracking-tight uppercase">Paying Guest Accommodation</span>
+                  <div className="flex items-center gap-1.5 text-slate-900">
+                    <Building className="w-4 h-4 text-indigo-600" />
+                    <span className="font-extrabold text-xs tracking-tight uppercase">
+                      {businessConfig?.businessName || 'Paying Guest Accommodation'}
+                    </span>
                   </div>
-                  <p className="text-[9px] text-slate-450 mt-1">Official Payment Acknowledgement Slip</p>
+                  <p className="text-[9px] text-slate-400 mt-1 font-medium">Official Business Rent Receipt</p>
+                  {businessConfig?.address && (
+                    <p className="text-[8px] text-slate-400 max-w-[220px] mt-0.5 leading-normal">{businessConfig.address}</p>
+                  )}
+                  {businessConfig?.gstin && (
+                    <p className="text-[8px] text-indigo-600 font-bold font-mono mt-0.5">GSTIN: {businessConfig.gstin}</p>
+                  )}
                 </div>
                 <div className="text-right">
-                  <span className="text-[9px] font-mono font-bold bg-indigo-50 text-indigo-750 px-2 py-0.5 rounded-md border border-indigo-100 uppercase">
-                    Receipt
+                  <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-md border uppercase ${
+                    selectedReceipt.status === 'Paid' 
+                      ? 'bg-emerald-50 text-emerald-750 border-emerald-100' 
+                      : 'bg-rose-50 text-rose-700 border-rose-100 animate-pulse'
+                  }`}>
+                    {selectedReceipt.status === 'Paid' ? 'Receipt' : 'Invoice'}
                   </span>
-                  <p className="text-[8px] font-mono mt-1 text-slate-400">#REC-{selectedReceipt.id.toUpperCase().substring(4, 9)}</p>
+                  <p className="text-[8px] font-mono mt-1.5 text-slate-400">#REC-{selectedReceipt.id.toUpperCase().substring(4, 9)}</p>
                 </div>
               </div>
 
               {/* Grid details */}
-              <div className="grid grid-cols-2 gap-4 text-[11px] text-slate-600 bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
+              <div className="grid grid-cols-2 gap-4 text-[10px] text-slate-600 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
                 <div>
-                  <span className="text-[9px] text-slate-400 block uppercase font-semibold">Received From</span>
-                  <strong className="text-slate-800 text-xs mt-1 block">{selectedReceipt.guestName}</strong>
+                  <span className="text-[8px] text-slate-400 block uppercase font-bold tracking-wider">Tenant (Paid By)</span>
+                  <strong className="text-slate-800 text-xs mt-0.5 block">{selectedReceipt.guestName}</strong>
                   {getGuestInfoOfPayment(selectedReceipt) && (
-                    <span className="text-[9px] text-slate-450 font-mono italic block mt-0.5">
+                    <span className="text-[8px] text-slate-450 font-mono block mt-0.5 font-medium">
                       {getGuestInfoOfPayment(selectedReceipt)?.phone}
                     </span>
                   )}
                 </div>
 
                 <div>
-                  <span className="text-[9px] text-slate-400 block uppercase font-semibold">Accommodations</span>
-                  <strong className="text-slate-800 text-xs mt-1 block">Room {selectedReceipt.roomNumber}</strong>
-                  <span className="text-[9px] text-slate-450 block mt-0.5">Billing month: {selectedReceipt.billingPeriod}</span>
+                  <span className="text-[8px] text-slate-400 block uppercase font-bold tracking-wider">Premise Units</span>
+                  <strong className="text-slate-800 text-xs mt-0.5 block">Room {selectedReceipt.roomNumber}</strong>
+                  <span className="text-[8px] text-slate-450 block mt-0.5 font-medium">Billing Period: {selectedReceipt.billingPeriod}</span>
                 </div>
               </div>
 
               {/* Split calculation summary */}
-              <div className="space-y-2 text-[11px]">
-                <div className="flex justify-between pb-2 border-b border-slate-100 font-semibold text-slate-400 text-[10px]">
-                  <span>DESCRIPTION OF Billed Services</span>
-                  <span className="text-right">SUM</span>
+              <div className="space-y-2 text-[10px] font-medium text-slate-600">
+                <div className="flex justify-between pb-1.5 border-b border-slate-100 font-bold text-slate-400 uppercase tracking-wide text-[8px]">
+                  <span>Itemized Fee Categories</span>
+                  <span className="text-right">Amount due</span>
                 </div>
 
                 <div className="flex justify-between text-slate-800 pt-1">
                   <div>
                     <span className="font-bold">{selectedReceipt.type} Charge</span>
-                    <p className="text-[10px] text-slate-455 mt-0.5">{selectedReceipt.description || 'Accommodation rent / utility dues'}</p>
+                    <p className="text-[9px] text-slate-450 mt-0.5 font-normal leading-relaxed">
+                      {selectedReceipt.description || `${selectedReceipt.type} dues for period ${selectedReceipt.billingPeriod}`}
+                    </p>
                   </div>
-                  <span className="font-mono font-bold">₹{selectedReceipt.amount}.00</span>
+                  <span className="font-mono font-bold text-slate-900">₹{selectedReceipt.amount}.00</span>
                 </div>
               </div>
 
               {/* Aggregate block */}
               <div className="pt-4 border-t border-dashed border-slate-200 flex flex-col items-end space-y-1.5">
-                <div className="flex justify-between w-full text-xs">
-                  <span className="text-slate-455 font-medium">Billed Balance due:</span>
-                  <span className="font-mono font-bold text-slate-700">₹{selectedReceipt.amount}.00</span>
+                <div className="flex justify-between w-full text-xs font-semibold text-slate-500">
+                  <span>Invoiced Balance due:</span>
+                  <span className="font-mono text-slate-700">₹{selectedReceipt.amount}.00</span>
                 </div>
 
                 <div className="flex justify-between w-full text-sm mt-1.5 pt-1.5 border-t border-slate-150">
-                  <span className="font-extrabold text-slate-805">Amount Collected:</span>
+                  <span className="font-extrabold text-slate-850">
+                    {selectedReceipt.status === 'Paid' ? 'Total Paid Recieved:' : 'Total due:'}
+                  </span>
                   <span className="font-mono font-black text-indigo-700 text-md">₹{selectedReceipt.amount}.00</span>
                 </div>
 
-                <div className="mt-4 w-full flex items-center justify-between text-[10px] text-slate-400">
-                  <span>Sign: ___________________</span>
-                  <span className="font-mono bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-sm font-bold uppercase border border-emerald-100 flex items-center gap-0.5">
-                    <CheckCircle className="w-3 h-3 text-emerald-600 inline" /> Status: Paid
-                  </span>
-                </div>
+                {/* QR scan code on bottom of print receipts for easy payments! */}
+                {selectedReceipt.status !== 'Paid' ? (
+                  <div className="w-full flex items-center justify-between p-2.5 bg-indigo-50/50 rounded-xl border border-indigo-100/60 mt-3">
+                    <div className="space-y-0.5 max-w-[200px]">
+                      <span className="text-[9px] font-bold text-indigo-900 tracking-tight flex items-center gap-1">
+                        <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Scan & Pay via UPI</span>
+                      </span>
+                      <p className="text-[8px] text-slate-5050 leading-relaxed">
+                        Scan the QR code on the right with GPay, PhonePe or Paytm to settle instantly with landlord directly.
+                      </p>
+                    </div>
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&margin=3&data=${encodeURIComponent(
+                        `upi://pay?pa=${encodeURIComponent(businessConfig?.upiId || 'payingguest@upi')}&pn=${encodeURIComponent(businessConfig?.landlordName || 'PG Landlord')}&tn=${encodeURIComponent(`PG-Rent-${selectedReceipt.billingPeriod}`)}&am=${selectedReceipt.amount}&cu=INR`
+                      )}`}
+                      alt="UPI QR Code"
+                      referrerPolicy="no-referrer"
+                      className="w-16 h-16 object-contain bg-white p-1 border border-indigo-100 rounded-lg shrink-0 shadow-3xs"
+                    />
+                  </div>
+                ) : (
+                  <div className="mt-4 w-full flex items-center justify-between text-[9px] text-slate-400">
+                    <span className="italic font-medium">Issued by: {businessConfig?.landlordName || 'Hostel Administrator'}</span>
+                    <span className="font-mono bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-sm font-bold uppercase border border-emerald-100 flex items-center gap-0.5">
+                      <CheckCircle className="w-3 h-3 text-emerald-600" /> Status: Paid
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {/* Informational advice */}
-              <p className="text-[9px] text-center text-slate-400 pt-3 border-t border-slate-100">
-                Thank you for prompt payments. Contact landlord administration in case of discrepancies.
-              </p>
+              {/* Informational advice / customized terms stamp! */}
+              {businessConfig?.termsAndConditions ? (
+                <div className="pt-3 border-t border-slate-100">
+                  <span className="text-[8px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Accommodation Terms</span>
+                  <p className="text-[8px] text-slate-400 leading-normal whitespace-pre-line">{businessConfig.termsAndConditions}</p>
+                </div>
+              ) : (
+                <p className="text-[8px] text-center text-slate-400 pt-3 border-t border-slate-100">
+                  Thank you for prompt payments. Contact landlord administration in case of discrepancies.
+                </p>
+              )}
             </div>
 
             {/* Print trigger footer controls */}

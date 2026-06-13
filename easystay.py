@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-StayLedger PG Accommodation Hostel Management System
+EasyStay PG Accommodation Hostel Management System
 Converted entirely to Python 3 with terminal user interface,
 local JSON database persistence, interactive dashboards, and pro-rata utility calculation engines.
 
@@ -14,7 +14,7 @@ from datetime import datetime
 from uuid import uuid4
 
 # File database path for local persistence
-DB_FILE = "stayledger_db.json"
+DB_FILE = "easystay_db.json"
 
 
 # ==========================================
@@ -283,7 +283,7 @@ def get_room_share_label(room):
 
 def show_title():
     print("=" * 64)
-    print("             STAYLEDGER PG ACCOMMODATION MANAGER            ")
+    print("               EASYSTAY PG ACCOMMODATION MANAGER            ")
     print("                 [ Complete Python Version ]                ")
     print("=" * 64)
 
@@ -305,7 +305,7 @@ def read_choice(prompt, start_num, end_num):
 # ==========================================
 # SYSTEM DATA CONTROL CONTROLLER CLASS
 # ==========================================
-class StayLedgerDB:
+class EasyStayDB:
     def __init__(self):
         self.rooms = []
         self.guests = []
@@ -347,9 +347,9 @@ class StayLedgerDB:
 # ==========================================
 # CONTROLLER & VIEWS DEMUX
 # ==========================================
-class StayLedgerApp:
+class EasyStayApp:
     def __init__(self):
-        self.db = StayLedgerDB()
+        self.db = EasyStayDB()
 
     def run(self):
         while True:
@@ -362,7 +362,7 @@ class StayLedgerApp:
             print("3. [Payments] Billing Ledger & Cash Collection")
             print("4. [Utility Splitter] Distribute Common Bills (Pro-Rata/Equal)")
             print("5. [Reset Template] Clear Database to Default Mock Values")
-            print("6. Exit StayLedger Operator Console")
+            print("6. Exit EasyStay Operator Console")
             print("-" * 64)
 
             ch = read_choice("Enter command index (1-6): ", 1, 6)
@@ -377,7 +377,7 @@ class StayLedgerApp:
             elif ch == 5:
                 self.reset_system()
             elif ch == 6 or ch is None:
-                print("\nThank you for using StayLedger. Goodbye!\n")
+                print("\nThank you for using EasyStay. Goodbye!\n")
                 break
 
     def show_dashboard_stats(self):
@@ -1219,5 +1219,5 @@ class StayLedgerApp:
 # BOOT EXECUTION TRIGGER
 # ==========================================
 if __name__ == "__main__":
-    app = StayLedgerApp()
+    app = EasyStayApp()
     app.run()

@@ -95,7 +95,7 @@ export default function RemindersSection({
     const daysLateText = getStatusCategory(payment) === 'Overdue' ? ' and is currently past due' : '';
 
     if (customTemplate === 'formal') {
-      return `Dear ${payment.guestName},\n\nThis is a formal payment notice from the StayLedger PG Management. Your ${payment.type.toLowerCase()} payment of ₹${payment.amount} for the billing period ${payment.billingPeriod} is due on ${dueDateText}${daysLateText}.\n\nKindly clear this outstanding amount at your earliest convenience to avoid potential late fees.\n\nThank you for your cooperation.\nBest regards,\nPG Administrator`;
+      return `Dear ${payment.guestName},\n\nThis is a formal payment notice from the EasyStay PG Management. Your ${payment.type.toLowerCase()} payment of ₹${payment.amount} for the billing period ${payment.billingPeriod} is due on ${dueDateText}${daysLateText}.\n\nKindly clear this outstanding amount at your earliest convenience to avoid potential late fees.\n\nThank you for your cooperation.\nBest regards,\nPG Administrator`;
     } else if (customTemplate === 'gentle') {
       return `Hey ${payment.guestName}! 😊 Just a friendly ping that the payment for ${payment.billingPeriod} (${payment.type.toLowerCase()}) is due on ${dueDateText === 'TODAY' ? 'today' : dueDateText}. It comes to ₹${payment.amount}.\n\nNo rush, just wanted to let you know as you plan out your day. Have a magnificent day! 🌸`;
     }

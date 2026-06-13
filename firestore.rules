@@ -16,13 +16,17 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'meruvashanmugam9@gmail.com';
+    }
+
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     // 2. User root documents
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if isOwner(userId) || isAdmin();
     }
 
     // 3. User subcollections (Flat Rules)
@@ -44,6 +48,11 @@ service cloud.firestore {
     match /users/{userId}/deletedGuests/{deletedGuestId} {
       allow list: if isOwner(userId);
       allow get, create, update, delete: if isOwner(userId) && isValidId(deletedGuestId);
+    }
+
+    match /users/{userId}/businessConfig/{configId} {
+      allow list: if isOwner(userId);
+      allow get, create, update, delete: if isOwner(userId);
     }
   }
 }
