@@ -16,14 +16,15 @@ import {
   Bell,
   Briefcase,
   TrendingUp,
-  Lock
+  Lock,
+  RefreshCw
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 // Firebase imports
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { doc, setDoc, deleteDoc, collection, onSnapshot, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, onSnapshot, getDocs, writeBatch, getDoc } from 'firebase/firestore';
 
 // Type imports
 import { 
@@ -50,6 +51,26 @@ import BusinessHub from './components/BusinessHub';
 import PlatformAdmin, { SubscriptionMonthRecord } from './components/PlatformAdmin';
 
 export default function App() {
+  const CLIENT_VERSION = '1.3.0'; // Current deployed features bundle version
+  const [appConfig, setAppConfig] = useState<{
+    latestVersion: string;
+    downloadUrl: string;
+    updateNotes: string;
+    isCritical: boolean;
+  } | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
+
+  // States for legacy tompippopentertainment@gmail.com data migration and profile cleanup
+  const [legacyMigrateUser, setLegacyMigrateUser] = useState<{
+    uid: string;
+    email: string;
+    displayName?: string;
+    roomCount?: number;
+    guestCount?: number;
+  } | null>(null);
+  const [showMigrationModal, setShowMigrationModal] = useState<boolean>(false);
+  const [migrationInProgress, setMigrationInProgress] = useState<boolean>(false);
+
   const [activeTab, setActiveTab] = useState<string>('Dashboard');
 
   // User and cloud states
@@ -144,6 +165,171 @@ export default function App() {
     });
 
     return () => unsubscribeAuth();
+  }, []);
+
+  // Look for legacy tompippopentertainment@gmail.com account data to import to meruvashanmugam9@gmail.com
+  useEffect(() => {
+    if (!user || user.email?.toLowerCase() !== 'meruvashanmugam9@gmail.com') return;
+
+    const findLegacyUser = async () => {
+      try {
+        const usersRef = collection(db, 'users');
+        const snap = await getDocs(usersRef);
+        let foundLegacy: any = null;
+        
+        snap.forEach((d) => {
+          const data = d.data();
+          if (data.email?.toLowerCase() === 'tompippopentertainment@gmail.com') {
+            foundLegacy = {
+              uid: d.id,
+              email: data.email,
+              displayName: data.displayName,
+              roomCount: data.roomCount || 0,
+              guestCount: data.guestCount || 0
+            };
+          }
+        });
+
+        if (foundLegacy) {
+          // Check if current user already has migrated data (rooms or guests)
+          const curRoomsSnap = await getDocs(collection(db, 'users', user.uid, 'rooms'));
+          if (curRoomsSnap.empty) {
+            setLegacyMigrateUser(foundLegacy);
+            setShowMigrationModal(true);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not find matching legacy account directories:", err);
+      }
+    };
+
+    // Delay a bit to allow connections to establish securely
+    const delayTimer = setTimeout(() => {
+      findLegacyUser();
+    }, 2000);
+
+    return () => clearTimeout(delayTimer);
+  }, [user]);
+
+  const handleLegacyMigration = async () => {
+    if (!user || !legacyMigrateUser) return;
+    setMigrationInProgress(true);
+    try {
+      // 1. Fetch all data from the old user subcollections
+      const oldRoomsSnap = await getDocs(collection(db, 'users', legacyMigrateUser.uid, 'rooms'));
+      const oldGuestsSnap = await getDocs(collection(db, 'users', legacyMigrateUser.uid, 'guests'));
+      const oldPaymentsSnap = await getDocs(collection(db, 'users', legacyMigrateUser.uid, 'payments'));
+      const oldDeletedSnap = await getDocs(collection(db, 'users', legacyMigrateUser.uid, 'deletedGuests'));
+      const oldConfigSnap = await getDoc(doc(db, 'users', legacyMigrateUser.uid, 'businessConfig', 'settings'));
+
+      const batch = writeBatch(db);
+
+      // Copy Rooms
+      oldRoomsSnap.forEach((d) => {
+        batch.set(doc(db, 'users', user.uid, 'rooms', d.id), d.data());
+      });
+
+      // Copy Guests
+      oldGuestsSnap.forEach((d) => {
+        batch.set(doc(db, 'users', user.uid, 'guests', d.id), d.data());
+      });
+
+      // Copy Payments
+      oldPaymentsSnap.forEach((d) => {
+        batch.set(doc(db, 'users', user.uid, 'payments', d.id), d.data());
+      });
+
+      // Copy Deleted Guests
+      oldDeletedSnap.forEach((d) => {
+        batch.set(doc(db, 'users', user.uid, 'deletedGuests', d.id), d.data());
+      });
+
+      // Copy Business Config
+      if (oldConfigSnap.exists()) {
+        batch.set(doc(db, 'users', user.uid, 'businessConfig', 'settings'), oldConfigSnap.data());
+      }
+
+      // Update User profile information
+      batch.set(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        email: user.email,
+        displayName: legacyMigrateUser.displayName || user.displayName || 'PG Owner',
+        lastActive: new Date().toISOString(),
+        subscriptionStatus: 'active'
+      }, { merge: true });
+
+      // 2. Commit all writes to the new user ID
+      await batch.commit();
+
+      // 3. Purging the old registered account as requested ("remove it and update my gmail like...")
+      const deleteBatch = writeBatch(db);
+      oldRoomsSnap.forEach((d) => {
+        deleteBatch.delete(doc(db, 'users', legacyMigrateUser.uid, 'rooms', d.id));
+      });
+      oldGuestsSnap.forEach((d) => {
+        deleteBatch.delete(doc(db, 'users', legacyMigrateUser.uid, 'guests', d.id));
+      });
+      oldPaymentsSnap.forEach((d) => {
+        deleteBatch.delete(doc(db, 'users', legacyMigrateUser.uid, 'payments', d.id));
+      });
+      oldDeletedSnap.forEach((d) => {
+        deleteBatch.delete(doc(db, 'users', legacyMigrateUser.uid, 'deletedGuests', d.id));
+      });
+      deleteBatch.delete(doc(db, 'users', legacyMigrateUser.uid, 'businessConfig', 'settings'));
+      deleteBatch.delete(doc(db, 'users', legacyMigrateUser.uid));
+
+      await deleteBatch.commit();
+
+      alert("🎉 Cloud migration complete! All PG rooms, guests, payments and custom credentials have been securely registered to meruvashanmugam9@gmail.com, and the old tompippopentertainment@gmail.com account was safely removed.");
+      setShowMigrationModal(false);
+      window.location.reload();
+    } catch (err) {
+      console.error("Migration error:", err);
+      alert("Failed during secure database migration: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setMigrationInProgress(false);
+    }
+  };
+
+  // Listen to Global App configuration for update notifier alerts
+  useEffect(() => {
+    const configRef = doc(db, 'system', 'app_config');
+    const unsubSystem = onSnapshot(configRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setAppConfig({
+          latestVersion: data.latestVersion || '1.3.0',
+          downloadUrl: data.downloadUrl || '',
+          updateNotes: data.updateNotes || '',
+          isCritical: !!data.isCritical
+        });
+
+        // Version comparison helper: check if client needs update
+        const clientSec = CLIENT_VERSION.split('.').map(Number);
+        const serverSec = (data.latestVersion || '1.3.0').split('.').map(Number);
+        
+        let needsUpdate = false;
+        for (let i = 0; i < Math.max(clientSec.length, serverSec.length); i++) {
+          const c = clientSec[i] || 0;
+          const s = serverSec[i] || 0;
+          if (s > c) {
+            needsUpdate = true;
+            break;
+          } else if (c > s) {
+            break;
+          }
+        }
+        if (needsUpdate) {
+          setShowUpdateModal(true);
+        } else {
+          setShowUpdateModal(false);
+        }
+      }
+    }, (error) => {
+      console.warn("Could not read global system version configs. Local operation continues.", error);
+    });
+
+    return () => unsubSystem();
   }, []);
 
   // Real-time Cloud Synchronization
@@ -1139,10 +1325,160 @@ export default function App() {
         <footer className="bg-slate-50 border-t border-slate-200 py-5 px-6 md:px-10">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-xs">
             <div className="text-slate-400 font-mono">
-              <span>EasyStay v1.0 • PG Guest Tracker</span>
+              <span>EasyStay v{CLIENT_VERSION} • PG Guest Tracker</span>
             </div>
           </div>
         </footer>
+
+        {/* Dynamic App Remote Update Overlay Modal */}
+        {showUpdateModal && appConfig && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/85 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-1 bg-indigo-600" />
+              
+              <div className="p-8 space-y-6 text-center">
+                {/* Visual Header */}
+                <div className="w-14 h-14 bg-indigo-55/10 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-xs">
+                  <Sparkles className="w-7 h-7" />
+                </div>
+
+                <div className="space-y-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-[10px] uppercase font-bold tracking-wider text-indigo-700">
+                    ✨ Premium Update Released
+                  </span>
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                    Update Available (v{appConfig.latestVersion})
+                  </h3>
+                  <p className="text-[11px] font-mono text-slate-400">
+                    Your Installed Build: v{CLIENT_VERSION}
+                  </p>
+                </div>
+
+                {appConfig.updateNotes && (
+                  <div className="bg-slate-50 p-4 rounded-2xl text-left space-y-1.5 border border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">📦 What's New:</p>
+                    <p className="text-xs text-slate-600 leading-relaxed font-bold">
+                      {appConfig.updateNotes}
+                    </p>
+                  </div>
+                )}
+
+                {appConfig.isCritical && (
+                  <div className="bg-rose-50 border border-rose-100/60 p-3.5 rounded-2xl flex items-center gap-3 text-left">
+                    <div className="p-1.5 bg-rose-550 text-rose-50 rounded-lg shrink-0">
+                      <Lock className="w-4 h-4 text-rose-600" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-rose-800">Required Upgrade</p>
+                      <p className="text-[10px] text-rose-600 leading-normal">This updates database cloud protocols. You must install the newer APK to continue usage.</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2.5 pt-2">
+                  {appConfig.downloadUrl ? (
+                    <a
+                      href={appConfig.downloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs shadow-md transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      🚀 Install Free Update Now
+                    </a>
+                  ) : (
+                    <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800 font-semibold text-center leading-relaxed">
+                      Contact support at <strong>meruvashanmugam9@gmail.com</strong> to fetch the download file for this version.
+                    </div>
+                  )}
+
+                  {!appConfig.isCritical && (
+                    <button
+                      onClick={() => setShowUpdateModal(false)}
+                      className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-xs transition cursor-pointer"
+                    >
+                      Remind Me Later
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic Legacy Database Migration Overlay Modal */}
+        {showMigrationModal && legacyMigrateUser && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/85 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-1 bg-amber-500" />
+              
+              <div className="p-8 space-y-6 text-center">
+                {/* Visual Header */}
+                <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto text-amber-600 shadow-xs">
+                  <RefreshCw className={`w-7 h-7 ${migrationInProgress ? 'animate-spin' : ''}`} />
+                </div>
+
+                <div className="space-y-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-[10px] uppercase font-bold tracking-wider text-amber-700">
+                    🔄 Legacy Cloud Account Detected
+                  </span>
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                    Import Legacy PG Data & Update Email Owner
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                    We detected your active tenant catalog data stored under the legacy mail directory <strong className="text-slate-800 font-bold">{legacyMigrateUser.email}</strong>.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-2xl text-left space-y-3 border border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">📦 Directory Payload to Migrate:</p>
+                  <ul className="grid grid-cols-2 gap-2 text-xs text-slate-650 font-bold">
+                    <li className="flex items-center gap-2 text-slate-650">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      {legacyMigrateUser.roomCount || 0} Rooms
+                    </li>
+                    <li className="flex items-center gap-2 text-slate-650">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      {legacyMigrateUser.guestCount || 0} Occupants
+                    </li>
+                    <li className="col-span-2 flex items-center gap-2 text-slate-650">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      Rent Ledger, Utility Calculations & Business Hub Specs
+                    </li>
+                  </ul>
+                  <div className="p-2.5 bg-amber-50/50 rounded-xl text-[11px] text-amber-800 leading-relaxed font-semibold">
+                    Confirm moving this directory to your current login <strong className="text-slate-900">{user?.email}</strong>. The old {legacyMigrateUser.email} catalog will be deleted.
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 pt-2">
+                  <button
+                    onClick={handleLegacyMigration}
+                    disabled={migrationInProgress}
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-sm shadow-md transition duration-150 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {migrationInProgress ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Synchronizing Secure Cloud Databases...
+                      </>
+                    ) : (
+                      "🚀 Begin Secure Database Migration"
+                    )}
+                  </button>
+
+                  {!migrationInProgress && (
+                    <button
+                      onClick={() => setShowMigrationModal(false)}
+                      className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl font-bold text-xs transition cursor-pointer"
+                    >
+                      Remind Me Later / Operate Empty Instance
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

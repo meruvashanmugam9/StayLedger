@@ -31,28 +31,34 @@ service cloud.firestore {
 
     // 3. User subcollections (Flat Rules)
     match /users/{userId}/rooms/{roomId} {
-      allow list: if isOwner(userId);
-      allow get, create, update, delete: if isOwner(userId) && isValidId(roomId);
+      allow list: if isOwner(userId) || isAdmin();
+      allow get, create, update, delete: if (isOwner(userId) || isAdmin()) && isValidId(roomId);
     }
 
     match /users/{userId}/guests/{guestId} {
-      allow list: if isOwner(userId);
-      allow get, create, update, delete: if isOwner(userId) && isValidId(guestId);
+      allow list: if isOwner(userId) || isAdmin();
+      allow get, create, update, delete: if (isOwner(userId) || isAdmin()) && isValidId(guestId);
     }
 
     match /users/{userId}/payments/{paymentId} {
-      allow list: if isOwner(userId);
-      allow get, create, update, delete: if isOwner(userId) && isValidId(paymentId);
+      allow list: if isOwner(userId) || isAdmin();
+      allow get, create, update, delete: if (isOwner(userId) || isAdmin()) && isValidId(paymentId);
     }
 
     match /users/{userId}/deletedGuests/{deletedGuestId} {
-      allow list: if isOwner(userId);
-      allow get, create, update, delete: if isOwner(userId) && isValidId(deletedGuestId);
+      allow list: if isOwner(userId) || isAdmin();
+      allow get, create, update, delete: if (isOwner(userId) || isAdmin()) && isValidId(deletedGuestId);
     }
 
     match /users/{userId}/businessConfig/{configId} {
-      allow list: if isOwner(userId);
-      allow get, create, update, delete: if isOwner(userId);
+      allow list: if isOwner(userId) || isAdmin();
+      allow get, create, update, delete: if isOwner(userId) || isAdmin();
+    }
+
+    // 4. Global system configuration (Allow read for logged in users, write only for Platform Admin)
+    match /system/{documentId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
   }
 }

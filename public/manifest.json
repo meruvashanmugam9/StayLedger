@@ -3,6 +3,7 @@
   "short_name": "EasyStay",
   "description": "Premium Paying Guest (PG) accommodation and hostel management system tracker. Manage guest details, rent payments, rooms, and billing schedules with smart reminders.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
@@ -14,6 +15,13 @@
     "utilities",
     "business",
     "productivity"
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "com.easystay.app",
+      "url": "https://play.google.com/store/apps/details?id=com.easystay.app"
+    }
   ],
   "icons": [
     {
@@ -73,6 +81,5 @@
       "form_factor": "narrow",
       "label": "EasyStay Room & Rent Manager - Mobile"
     }
-  ],
-  "prefer_related_applications": false
+  ]
 }

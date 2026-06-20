@@ -12,6 +12,12 @@ export default defineConfig(() => {
       },
     },
     server: {
+      cors: true,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, HEAD, PUT, PATCH, POST, DELETE',
+        'Access-Control-Allow-Headers': '*'
+      },
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',

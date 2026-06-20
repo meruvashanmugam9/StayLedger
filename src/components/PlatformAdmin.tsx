@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { 
   Users, 
@@ -20,7 +20,8 @@ import {
   Trash2,
   DollarSign,
   X,
-  Check
+  Check,
+  Sparkles
 } from 'lucide-react';
 
 export interface SubscriptionMonthRecord {
@@ -59,6 +60,13 @@ export default function PlatformAdmin() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [syncCount, setSyncCount] = useState(0);
 
+  // Global App Versioning states for Live Update system
+  const [latestVersion, setLatestVersion] = useState('1.3.0');
+  const [downloadUrl, setDownloadUrl] = useState('');
+  const [updateNotes, setUpdateNotes] = useState('Added Business Settings & Splitter modules!');
+  const [isCritical, setIsCritical] = useState(false);
+  const [versionLoading, setVersionLoading] = useState(false);
+
   // New billing cycle form state
   const [showAddCycle, setShowAddCycle] = useState(false);
   const [billingMonth, setBillingMonth] = useState('');
@@ -96,8 +104,46 @@ export default function PlatformAdmin() {
     }
   };
 
+  const fetchSystemConfig = async () => {
+    try {
+      const configRef = doc(db, 'system', 'app_config');
+      const snap = await getDoc(configRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        setLatestVersion(data.latestVersion || '1.3.0');
+        setDownloadUrl(data.downloadUrl || '');
+        setUpdateNotes(data.updateNotes || '');
+        setIsCritical(!!data.isCritical);
+      }
+    } catch (err) {
+      console.error("Error reading system app config: ", err);
+    }
+  };
+
+  const handleSaveSystemConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVersionLoading(true);
+    try {
+      const configRef = doc(db, 'system', 'app_config');
+      await setDoc(configRef, {
+        latestVersion,
+        downloadUrl,
+        updateNotes,
+        isCritical,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      alert("Live App Update parameters successfully saved. Friends & clients with older APK downloads will see an instant update overlay!");
+    } catch (err) {
+      console.error("Error saving system app config: ", err);
+      alert("Failed to write global update configuration. Check internet connection.");
+    } finally {
+      setVersionLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchSystemConfig();
   }, [syncCount]);
 
   const handleEditClick = (u: PlatformUser) => {
@@ -838,6 +884,76 @@ export default function PlatformAdmin() {
               </div>
             </div>
           )}
+
+          {/* Global APK Release Update configuration Panel */}
+          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-3xs space-y-4">
+            <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+              <span className="p-1.5 bg-indigo-50 rounded-lg text-indigo-600 block">
+                <Sparkles className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <h4 className="font-extrabold text-slate-900 text-xs tracking-tight">APK Version & Remote Update</h4>
+                <p className="text-[9px] text-slate-400 font-medium">Pushes version alerts instantly to all remote client installations.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveSystemConfig} className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-400 block uppercase">Target Version</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 1.3.1"
+                    value={latestVersion}
+                    onChange={(e) => setLatestVersion(e.target.value)}
+                    className="w-full text-xs p-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-lg outline-none font-bold text-slate-800"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-400 block uppercase">Warn Settings</label>
+                  <select
+                    value={isCritical ? 'true' : 'false'}
+                    onChange={(e) => setIsCritical(e.target.value === 'true')}
+                    className="w-full text-xs p-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-lg outline-none font-bold text-slate-800"
+                  >
+                    <option value="false">Optional Alert</option>
+                    <option value="true">Force Lockout</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-400 block uppercase">Direct Download URL (APK / Play Store)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Google Play or Cloud Drive Link"
+                  value={downloadUrl}
+                  onChange={(e) => setDownloadUrl(e.target.value)}
+                  className="w-full text-[11px] p-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-lg outline-none font-mono text-indigo-600"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-400 block uppercase">Release Notes (Shown on phones)</label>
+                <textarea
+                  placeholder="e.g. Added Business Settings tab, fixed payment receipts!"
+                  rows={2}
+                  value={updateNotes}
+                  onChange={(e) => setUpdateNotes(e.target.value)}
+                  className="w-full text-xs p-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-lg outline-none resize-none leading-relaxed text-slate-600"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={versionLoading}
+                className="w-full py-2 bg-indigo-600 border border-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[11px] rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer"
+              >
+                {versionLoading ? 'Pushing Update...' : '💾 Push New Features Live Update'}
+              </button>
+            </form>
+          </div>
 
           {/* Guide Card helper */}
           <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100/50 space-y-2 text-xs">

@@ -1,6 +1,8 @@
 {
-  "name": "EasyStay PG Tracker",
-  "description": "Premium Paying Guest accommodation and hostel manager with automated rent ledger, pro-rata utility calculations, and smart WhatsApp reminders.",
+  "name": "EasyStay",
+  "description": "Premium Paying Guest (PG) accommodation and hostel management system tracker. Manage guest details, rent payments, rooms, and billing schedules with smart reminders.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
