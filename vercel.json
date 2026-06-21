@@ -1,9 +1,15 @@
 {
   "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+  "routes": [
+    { "src": "/assets/(.*)", "dest": "/assets/$1" },
+    { "src": "/icon-192.png", "dest": "/icon-192.png" },
+    { "src": "/icon-512.png", "dest": "/icon-512.png" },
+    { "src": "/manifest.json", "dest": "/manifest.json" },
+    { "src": "/screenshot-desktop.jpg", "dest": "/screenshot-desktop.jpg" },
+    { "src": "/screenshot-mobile.jpg", "dest": "/screenshot-mobile.jpg" },
+    { "src": "/sw.js", "dest": "/sw.js" },
+    { "src": "/widgets-data.json", "dest": "/widgets-data.json" },
+    { "src": "/widgets-template.json", "dest": "/widgets-template.json" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
